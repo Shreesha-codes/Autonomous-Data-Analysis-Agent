@@ -2,63 +2,68 @@ import React, { useState } from 'react';
 import { useSessions } from '../context/SessionContext';
 import { UploadZone } from './UploadZone';
 import { ProfileDashboard } from './ProfileDashboard';
+import { ExecutionStepper, type IExecutionLog } from './ExecutionStepper';
 
 export const MainContent: React.FC = () => {
-  const { activeSession, addInteraction, loading } = useSessions();
+  const { activeSession, submitQuery, loading } = useSessions();
   const [question, setQuestion] = useState('');
-  const [running, setRunning] = useState(false);
+  const [queryActive, setQueryActive] = useState(false);
+  const [queryLogs, setQueryLogs] = useState<IExecutionLog[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!question.trim() || !activeSession || running) return;
+    if (!question.trim() || !activeSession || queryActive) return;
 
-    setRunning(true);
-    // Mock interaction generator
-    const code = `import pandas as pd\nimport matplotlib.pyplot as plt\n\n# Load dataset\ndf = pd.read_csv("dataset.csv")\nprint(df.describe())\n\n# Plot configuration\nplt.figure(figsize=(10, 6))\nplt.title("Data distribution for ${question}")\nplt.show()`;
-    
-    const executionResult = {
-      status: "success",
-      rowsProcessed: activeSession.dataProfile?.rowCount || 1250,
-      columns: activeSession.dataProfile?.columns.map((c: any) => c.name) || ["id", "timestamp", "metric_value", "category"],
-      summary: {
-        mean: 42.87,
-        std: 15.42,
-        min: 1.0,
-        max: 99.0
+    setQueryActive(true);
+    setQueryLogs([
+      {
+        status: 'translating',
+        message: 'Translating business query to Python pandas script...',
+        timestamp: new Date().toISOString()
       }
-    };
+    ]);
 
-    const chartData = {
-      type: "bar",
-      labels: ["Q1", "Q2", "Q3", "Q4"],
-      datasets: [
-        {
-          label: "Performance Metrics",
-          data: [12, 19, 3, 5],
-          backgroundColor: "rgba(99, 102, 241, 0.5)"
+    const result = await submitQuery(activeSession.sessionId, question);
+
+    if (result.success && result.logs) {
+      // Simulate real-time stepping of logs for a premium user experience
+      let logIndex = 0;
+      const interval = setInterval(() => {
+        if (logIndex < result.logs!.length) {
+          setQueryLogs((prev) => {
+            // Avoid duplicating the first translating log
+            if (logIndex === 0) return [result.logs![0]];
+            return [...prev, result.logs![logIndex]];
+          });
+          logIndex++;
+        } else {
+          clearInterval(interval);
+          setTimeout(() => {
+            setQueryActive(false);
+            setQueryLogs([]);
+          }, 1500); // clear stepper and show result
         }
-      ]
-    };
-
-    const narrative = {
-      summary: `Analyzed dataset for query "${question}". The metric values show a standard normal distribution with a peak mean value around 42.87.`,
-      insights: [
-        "A strong concentration of activity is observed in Q2 (19 points).",
-        "Performance variability remains within normal bounds.",
-        "Q3 shows a significant drop-off, recommending investigation."
-      ]
-    };
-
-    await addInteraction(activeSession.sessionId, {
-      question,
-      generatedCode: code,
-      executionResult,
-      chartData,
-      narrative
-    });
+      }, 800);
+    } else {
+      // Error state
+      if (result.logs) {
+        setQueryLogs(result.logs);
+      } else {
+        setQueryLogs((prev) => [
+          ...prev,
+          {
+            status: 'failed',
+            message: result.error || 'Execution sandbox error.',
+            timestamp: new Date().toISOString()
+          }
+        ]);
+      }
+      setTimeout(() => {
+        setQueryActive(false);
+      }, 3000);
+    }
 
     setQuestion('');
-    setRunning(false);
   };
 
   if (!activeSession) {
@@ -117,13 +122,20 @@ export const MainContent: React.FC = () => {
           </div>
         ) : (
           <>
+            {/* Stepper Visualizer while query running */}
+            {queryActive && (
+              <div className="py-6 border-b border-slate-900">
+                <ExecutionStepper logs={queryLogs} active={queryActive} />
+              </div>
+            )}
+
             {/* Show Data Profile if present */}
-            {activeSession.dataProfile && (
+            {activeSession.dataProfile && !queryActive && (
               <ProfileDashboard profile={activeSession.dataProfile as any} />
             )}
 
             {/* Interactions Pane Divider */}
-            {activeSession.interactions.length > 0 && (
+            {activeSession.interactions.length > 0 && !queryActive && (
               <div className="border-t border-slate-800/80 pt-6">
                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-6">Session Queries ({activeSession.interactions.length})</h3>
                 <div className="space-y-8">
@@ -194,7 +206,7 @@ export const MainContent: React.FC = () => {
                           </div>
                           <div className="text-[10px] text-slate-500 flex justify-between px-1">
                             <span>Chart: {interaction.chartData?.type}</span>
-                            <span>Dataset size: {interaction.executionResult?.rowsProcessed} rows</span>
+                            <span>Dataset size: {interaction.executionResult?.rowsProcessed || interaction.executionResult?.status} rows</span>
                           </div>
                         </div>
                       </div>
@@ -229,12 +241,12 @@ export const MainContent: React.FC = () => {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="Type your question about dataset (e.g. 'Plot average score over time')"
-              disabled={loading || running}
+              disabled={loading || queryActive}
               className="w-full pl-6 pr-16 py-4 bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all shadow-inner disabled:opacity-50"
             />
             <button
               type="submit"
-              disabled={!question.trim() || loading || running}
+              disabled={!question.trim() || loading || queryActive}
               className="absolute right-3 p-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none hover:scale-105"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

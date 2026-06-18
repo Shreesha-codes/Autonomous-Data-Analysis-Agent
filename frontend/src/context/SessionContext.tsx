@@ -37,6 +37,10 @@ interface SessionContextType {
     interactionData: Omit<IInteraction, 'timestamp'>
   ) => Promise<void>;
   uploadFile: (sessionId: string, file: File) => Promise<boolean>;
+  submitQuery: (
+    sessionId: string,
+    question: string
+  ) => Promise<{ success: boolean; data?: ISession; logs?: any[]; error?: string }>;
   setActiveSession: (session: ISession | null) => void;
 }
 
@@ -170,6 +174,36 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     return false;
   };
 
+  const submitQuery = async (
+    sessionId: string,
+    question: string
+  ): Promise<{ success: boolean; data?: ISession; logs?: any[]; error?: string }> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/${sessionId}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setActiveSessionState(json.data);
+        setSessions(prev => prev.map(s => s.sessionId === sessionId ? json.data : s));
+        return { success: true, data: json.data, logs: json.logs };
+      } else {
+        setError(json.error || 'Query failed');
+        return { success: false, error: json.error, logs: json.logs };
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Query server connection failed');
+      return { success: false, error: 'Query server connection failed' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const setActiveSession = (session: ISession | null) => {
     setActiveSessionState(session);
   };
@@ -190,6 +224,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
         createSession,
         addInteraction,
         uploadFile,
+        submitQuery,
         setActiveSession
       }}
     >

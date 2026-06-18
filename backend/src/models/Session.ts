@@ -5,6 +5,7 @@ export interface IFileMetadata {
   fileSize: number;
   mimeType: string;
   uploadedAt: Date;
+  filePath?: string;
 }
 
 export interface IInteraction {
@@ -28,7 +29,8 @@ const FileMetadataSchema = new Schema<IFileMetadata>({
   fileName: { type: String, required: true },
   fileSize: { type: Number, required: true },
   mimeType: { type: String, required: true },
-  uploadedAt: { type: Date, default: Date.now }
+  uploadedAt: { type: Date, default: Date.now },
+  filePath: { type: String, default: '' }
 });
 
 const InteractionSchema = new Schema<IInteraction>({

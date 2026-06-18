@@ -1,8 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import * as xlsx from 'xlsx';
+import path from 'path';
+import fs from 'fs';
 import { Session } from '../models/Session';
 import { profileDataset } from '../utils/profiler';
+import { generateCodeFromQuery } from '../utils/llm';
+import { executePythonCode } from '../utils/sandbox';
 
 const router = Router();
 
@@ -24,6 +28,12 @@ const upload = multer({
     cb(new Error('Only CSV, XLSX, and JSON file formats are supported!'));
   }
 });
+
+// Ensure uploads folder exists
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // Get all sessions
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -113,6 +123,10 @@ router.post('/:sessionId/upload', upload.single('file'), async (req: Request, re
       return;
     }
 
+    // Write file to local uploads directory
+    const filePath = path.join(uploadsDir, `${sessionId}_${req.file.originalname}`);
+    fs.writeFileSync(filePath, buffer);
+
     // Run automatic data profiling engine
     const profile = profileDataset(parsedData);
 
@@ -121,7 +135,8 @@ router.post('/:sessionId/upload', upload.single('file'), async (req: Request, re
       fileName: req.file.originalname,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
-      uploadedAt: new Date()
+      uploadedAt: new Date(),
+      filePath
     };
 
     session.filesUploaded = [fileMetadata]; // single file for now
@@ -132,6 +147,146 @@ router.post('/:sessionId/upload', upload.single('file'), async (req: Request, re
   } catch (error) {
     console.error('Upload error:', error);
     res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'File upload or parsing failed' });
+  }
+});
+
+// Stepper-integrated execution endpoint with correction loop
+router.post('/:sessionId/query', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { sessionId } = req.params;
+    const { question } = req.body;
+
+    if (!question) {
+      res.status(400).json({ success: false, error: 'question is required' });
+      return;
+    }
+
+    const session = await Session.findOne({ sessionId });
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
+    }
+
+    if (!session.filesUploaded || session.filesUploaded.length === 0) {
+      res.status(400).json({ success: false, error: 'No dataset uploaded for this session yet' });
+      return;
+    }
+
+    const fileMeta = session.filesUploaded[0];
+    const filePath = fileMeta.filePath || path.join(uploadsDir, `${sessionId}_${fileMeta.fileName}`);
+
+    const logs: { status: string; message: string; timestamp: string }[] = [];
+
+    logs.push({
+      status: 'translating',
+      message: 'Translating plain English query to Pandas code...',
+      timestamp: new Date().toISOString()
+    });
+
+    let attempt = 0;
+    const maxAttempts = 3;
+    let success = false;
+    let code = '';
+    let narrativeSummary = '';
+    let narrativeInsights: string[] = [];
+    let stdout = '';
+    let stderr = '';
+
+    while (attempt < maxAttempts && !success) {
+      attempt++;
+      if (attempt > 1) {
+        logs.push({
+          status: 'correcting',
+          message: `Error caught. Retrying code patch self-correction (Attempt ${attempt - 1}/3)...`,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Generate Python code
+      const llmResult = await generateCodeFromQuery(
+        question,
+        session.dataProfile,
+        filePath,
+        attempt > 1 ? code : undefined,
+        attempt > 1 ? stderr : undefined
+      );
+
+      code = llmResult.code;
+      narrativeSummary = llmResult.narrativeSummary;
+      narrativeInsights = llmResult.narrativeInsights;
+
+      logs.push({
+        status: 'executing',
+        message: `Executing generated code in isolated environment (Attempt ${attempt})...`,
+        timestamp: new Date().toISOString()
+      });
+
+      // Run sandbox execution
+      const execution = await executePythonCode(code, sessionId);
+      stdout = execution.stdout;
+      stderr = execution.stderr;
+
+      if (execution.success && !stderr) {
+        success = true;
+        logs.push({
+          status: 'completed',
+          message: 'Code sandbox execution completed successfully!',
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.warn(`[Self-Correction Loop] Attempt ${attempt} failed with stderr:`, stderr);
+      }
+    }
+
+    if (!success) {
+      logs.push({
+        status: 'failed',
+        message: `Self-correction loop failed after ${maxAttempts} attempts.`,
+        timestamp: new Date().toISOString()
+      });
+
+      res.status(500).json({
+        success: false,
+        error: 'Execution sandbox failed after self-correction retries.',
+        logs,
+        failedCode: code,
+        stderr
+      });
+      return;
+    }
+
+    // Attempt to parse stdout as JSON
+    let executionResult: any = null;
+    try {
+      executionResult = JSON.parse(stdout);
+    } catch {
+      executionResult = { rawStdout: stdout };
+    }
+
+    // Add successfully executed interaction to session
+    const interaction = {
+      question,
+      generatedCode: code,
+      executionResult,
+      chartData: { type: 'bar' },
+      narrative: {
+        summary: narrativeSummary,
+        insights: narrativeInsights
+      },
+      timestamp: new Date()
+    };
+
+    session.interactions.push(interaction);
+    await session.save();
+
+    res.json({
+      success: true,
+      data: session,
+      logs,
+      interaction
+    });
+  } catch (error) {
+    next(error);
   }
 });
 
