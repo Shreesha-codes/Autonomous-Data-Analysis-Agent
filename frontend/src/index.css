@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* Custom glassmorphism or custom styling if needed */
+body {
+  margin: 0;
+  background-color: #020617;
+  color: #f8fafc;
+}
