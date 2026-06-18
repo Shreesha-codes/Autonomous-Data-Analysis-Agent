@@ -21,6 +21,7 @@ export interface ISession {
   createdAt: string;
   filesUploaded: IFileMetadata[];
   interactions: IInteraction[];
+  dataProfile?: Record<string, any> | null;
 }
 
 interface SessionContextType {
@@ -35,6 +36,7 @@ interface SessionContextType {
     sessionId: string,
     interactionData: Omit<IInteraction, 'timestamp'>
   ) => Promise<void>;
+  uploadFile: (sessionId: string, file: File) => Promise<boolean>;
   setActiveSession: (session: ISession | null) => void;
 }
 
@@ -140,6 +142,34 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
+  const uploadFile = async (sessionId: string, file: File): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_BASE}/${sessionId}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      const json = await res.json();
+      if (json.success) {
+        setActiveSessionState(json.data);
+        setSessions(prev => prev.map(s => s.sessionId === sessionId ? json.data : s));
+        return true;
+      } else {
+        setError(json.error || 'Failed to upload file');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Connection to backend failed during upload');
+    } finally {
+      setLoading(false);
+    }
+    return false;
+  };
+
   const setActiveSession = (session: ISession | null) => {
     setActiveSessionState(session);
   };
@@ -159,6 +189,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
         fetchSessionById,
         createSession,
         addInteraction,
+        uploadFile,
         setActiveSession
       }}
     >

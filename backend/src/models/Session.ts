@@ -21,6 +21,7 @@ export interface ISession extends Document {
   createdAt: Date;
   filesUploaded: IFileMetadata[];
   interactions: IInteraction[];
+  dataProfile?: Record<string, any> | null;
 }
 
 const FileMetadataSchema = new Schema<IFileMetadata>({
@@ -43,7 +44,8 @@ const SessionSchema = new Schema<ISession>({
   sessionId: { type: String, required: true, unique: true, index: true },
   createdAt: { type: Date, default: Date.now },
   filesUploaded: { type: [FileMetadataSchema], default: [] },
-  interactions: { type: [InteractionSchema], default: [] }
+  interactions: { type: [InteractionSchema], default: [] },
+  dataProfile: { type: Schema.Types.Mixed, default: null }
 });
 
 export const Session = model<ISession>('Session', SessionSchema);

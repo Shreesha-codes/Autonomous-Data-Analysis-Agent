@@ -9,14 +9,7 @@ export const Sidebar: React.FC = () => {
     if (creating) return;
     setCreating(true);
     const newId = `session_${Date.now()}`;
-    await createSession(newId, [
-      {
-        fileName: 'dataset.csv',
-        fileSize: 1024 * 150, // 150KB
-        mimeType: 'text/csv',
-        uploadedAt: new Date().toISOString()
-      }
-    ]);
+    await createSession(newId, []);
     setCreating(false);
   };
 
