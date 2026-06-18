@@ -211,7 +211,8 @@ router.post('/:sessionId/query', async (req: Request, res: Response, next: NextF
         session.dataProfile,
         filePath,
         attempt > 1 ? code : undefined,
-        attempt > 1 ? stderr : undefined
+        attempt > 1 ? stderr : undefined,
+        session.interactions
       );
 
       code = llmResult.code;

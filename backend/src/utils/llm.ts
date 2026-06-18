@@ -20,7 +20,8 @@ export const generateCodeFromQuery = async (
   dataProfile: any,
   datasetPath: string,
   failedCode?: string,
-  errorLog?: string
+  errorLog?: string,
+  history?: any[]
 ): Promise<ILLMResult> => {
   const apiKey = process.env.GEMINI_API_KEY;
 
@@ -60,7 +61,22 @@ You must provide a structured JSON response containing:
 }
 `;
 
-  let prompt = `Question: "${question}"`;
+  let prompt = '';
+  if (history && history.length > 0) {
+    prompt += `Conversation history of past turns in this session:\n`;
+    history.forEach((h, i) => {
+      prompt += `\nTurn ${i + 1}:
+Question: "${h.question}"
+Generated Code:
+${h.generatedCode}
+Execution Outputs:
+${JSON.stringify(h.executionResult)}
+`;
+    });
+    prompt += `\nUse the context above to resolve the follow-up question below.\n\n`;
+  }
+
+  prompt += `Question: "${question}"`;
   if (isCorrection) {
     prompt += `\n\nYour previous code failed with this error:\n${errorLog}\n\nHere was the failed code:\n${failedCode}\n\nPlease output corrected code following the rules above.`;
   }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSessions } from '../context/SessionContext';
 
 export const Sidebar: React.FC = () => {
-  const { sessions, activeSession, createSession, setActiveSession, loading } = useSessions();
+  const { sessions, activeSession, createSession, fetchSessionById, loading } = useSessions();
   const [creating, setCreating] = useState(false);
 
   const handleNewSession = async () => {
@@ -69,7 +69,7 @@ export const Sidebar: React.FC = () => {
             return (
               <button
                 key={session.sessionId}
-                onClick={() => setActiveSession(session)}
+                onClick={() => fetchSessionById(session.sessionId)}
                 className={`w-full text-left p-3.5 rounded-xl transition-all duration-200 group flex flex-col space-y-1.5 ${
                   isActive
                     ? 'bg-violet-600/10 border border-violet-500/20 text-white shadow-inner'
