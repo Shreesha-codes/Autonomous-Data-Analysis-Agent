@@ -12,8 +12,19 @@ export interface IInteraction {
   question: string;
   generatedCode: string;
   executionResult: Record<string, any> | null;
-  chartData: Record<string, any> | null;
-  narrative: Record<string, any> | null;
+  chartData: {
+    chartType: 'bar' | 'line' | 'scatter' | 'heatmap' | 'distribution';
+    chartTitle: string;
+    xAxisLabel: string;
+    yAxisLabel: string;
+    data?: any[];
+  } | null;
+  narrative: {
+    summary: string;
+    keyInsights: string[];
+    limitations: string[];
+    nextSteps: string[];
+  } | null;
   timestamp: Date;
 }
 

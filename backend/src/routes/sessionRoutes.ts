@@ -188,7 +188,10 @@ router.post('/:sessionId/query', async (req: Request, res: Response, next: NextF
     let success = false;
     let code = '';
     let narrativeSummary = '';
-    let narrativeInsights: string[] = [];
+    let keyInsights: string[] = [];
+    let limitations: string[] = [];
+    let nextSteps: string[] = [];
+    let chartConfig: any = null;
     let stdout = '';
     let stderr = '';
 
@@ -213,7 +216,10 @@ router.post('/:sessionId/query', async (req: Request, res: Response, next: NextF
 
       code = llmResult.code;
       narrativeSummary = llmResult.narrativeSummary;
-      narrativeInsights = llmResult.narrativeInsights;
+      keyInsights = llmResult.keyInsights;
+      limitations = llmResult.limitations;
+      nextSteps = llmResult.nextSteps;
+      chartConfig = llmResult.chartConfig;
 
       logs.push({
         status: 'executing',
@@ -268,10 +274,18 @@ router.post('/:sessionId/query', async (req: Request, res: Response, next: NextF
       question,
       generatedCode: code,
       executionResult,
-      chartData: { type: 'bar' },
+      chartData: {
+        chartType: chartConfig?.chartType || 'bar',
+        chartTitle: chartConfig?.chartTitle || 'Query Analysis',
+        xAxisLabel: chartConfig?.xAxisLabel || 'x',
+        yAxisLabel: chartConfig?.yAxisLabel || 'y',
+        data: Array.isArray(executionResult) ? executionResult : []
+      },
       narrative: {
         summary: narrativeSummary,
-        insights: narrativeInsights
+        keyInsights,
+        limitations,
+        nextSteps
       },
       timestamp: new Date()
     };

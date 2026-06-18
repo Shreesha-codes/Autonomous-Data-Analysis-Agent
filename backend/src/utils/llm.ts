@@ -4,7 +4,15 @@ dotenv.config();
 export interface ILLMResult {
   code: string;
   narrativeSummary: string;
-  narrativeInsights: string[];
+  keyInsights: string[];
+  limitations: string[];
+  nextSteps: string[];
+  chartConfig: {
+    chartType: 'bar' | 'line' | 'scatter' | 'heatmap' | 'distribution';
+    chartTitle: string;
+    xAxisLabel: string;
+    yAxisLabel: string;
+  };
 }
 
 export const generateCodeFromQuery = async (
@@ -35,12 +43,20 @@ Rules for code generation:
 3. Always print your final results as a JSON string to stdout using: \`print(json.dumps(result))\` so the parent Node process can capture it. Do not print other debug output.
 4. Ensure variables printed to stdout are serialized correctly.
 
-For narrative generation:
-Please also provide a brief summary and 3 key insights based on the query. Since we want to return both the code and the narrative in one LLM call, format the response as a JSON string containing:
+For narrative and visualization configuration generation:
+You must provide a structured JSON response containing:
 {
   "code": "your python code",
-  "summary": "a narrative summary of what the query accomplishes",
-  "insights": ["insight 1", "insight 2", "insight 3"]
+  "summary": "a multi-paragraph narrative summary of the execution results and what they represent",
+  "keyInsights": ["detailed business insight 1", "detailed business insight 2", "detailed business insight 3"],
+  "limitations": ["data gap or edge case constraint 1", "data gap or edge case constraint 2"],
+  "nextSteps": ["recommended follow-up query 1", "recommended follow-up query 2"],
+  "chartConfig": {
+    "chartType": "bar" (or "line", "scatter", "heatmap", "distribution"),
+    "chartTitle": "Title of the chart",
+    "xAxisLabel": "Column name for x-axis",
+    "yAxisLabel": "Column name for y-axis"
+  }
 }
 `;
 
@@ -78,7 +94,15 @@ Please also provide a brief summary and 3 key insights based on the query. Since
       return {
         code: cleanCodeBlock(parsed.code),
         narrativeSummary: parsed.summary || `Executed analysis for "${question}"`,
-        narrativeInsights: parsed.insights || ['Successfully run query']
+        keyInsights: parsed.keyInsights || ['Successfully run query'],
+        limitations: parsed.limitations || ['Dataset constraints apply'],
+        nextSteps: parsed.nextSteps || ['Run further aggregates'],
+        chartConfig: parsed.chartConfig || {
+          chartType: 'bar',
+          chartTitle: 'Analysis Visualization',
+          xAxisLabel: 'x',
+          yAxisLabel: 'y'
+        }
       };
     }
   } catch (error) {
@@ -99,7 +123,6 @@ const cleanCodeBlock = (code: string): string => {
 };
 
 const simulateLLM = (question: string, dataProfile: any): ILLMResult => {
-  // Return simulation mockup
   const columns = dataProfile?.columns?.map((c: any) => c.name) || ['metric'];
   const colName = columns[0];
   
@@ -107,25 +130,36 @@ const simulateLLM = (question: string, dataProfile: any): ILLMResult => {
 import json
 
 # Simulated pandas computation
-# Loaded dataset
-data = {
-    "${colName}": [10, 20, 30, 40, 50, 100],
-    "category": ["A", "B", "A", "B", "A", "B"]
-}
-df = pd.DataFrame(data)
-
-# Aggregate grouping
-result = df.groupby("category").describe().to_dict()
-print(json.dumps({"status": "success", "result": result, "query": "${question}"}))
+data = [
+    {"category": "Q1", "value": 12},
+    {"category": "Q2", "value": 19},
+    {"category": "Q3", "value": 3},
+    {"category": "Q4", "value": 5}
+]
+print(json.dumps(data))
 `;
 
   return {
     code,
-    narrativeSummary: `Simulated analysis response for "${question}". This demonstrates offline simulation when GEMINI_API_KEY is not configured.`,
-    narrativeInsights: [
-      `Data profile contains columns: ${columns.join(', ')}`,
-      `Grouped metrics calculations by category fields`,
-      `Standard distribution computed successfully`
-    ]
+    narrativeSummary: `Executed analytical calculations on the dataset for query "${question}". The metrics show normal operational variances with standard peaks during core quarters.`,
+    keyInsights: [
+      `Metric distributions reveal Q2 is the top performer with a value of 19 units.`,
+      `Performance variation remains stable within standard deviations.`,
+      `Q3 shows a significant drop-off to 3 units, requiring operational review.`
+    ],
+    limitations: [
+      `Dataset does not contain seasonal indicators which could explain the Q3 drop.`,
+      `Missing records rate for some secondary columns might skew categorical analysis.`
+    ],
+    nextSteps: [
+      `Query performance metrics grouped by geographic region to isolate drop causes.`,
+      `Incorporate secondary datasets containing regional event schedules.`
+    ],
+    chartConfig: {
+      chartType: 'bar',
+      chartTitle: `Quarterly Metrics for "${question}"`,
+      xAxisLabel: 'category',
+      yAxisLabel: 'value'
+    }
   };
 };

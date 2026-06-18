@@ -3,6 +3,7 @@ import { useSessions } from '../context/SessionContext';
 import { UploadZone } from './UploadZone';
 import { ProfileDashboard } from './ProfileDashboard';
 import { ExecutionStepper, type IExecutionLog } from './ExecutionStepper';
+import { Visualizer } from './Visualizer';
 
 export const MainContent: React.FC = () => {
   const { activeSession, submitQuery, loading } = useSessions();
@@ -26,12 +27,10 @@ export const MainContent: React.FC = () => {
     const result = await submitQuery(activeSession.sessionId, question);
 
     if (result.success && result.logs) {
-      // Simulate real-time stepping of logs for a premium user experience
       let logIndex = 0;
       const interval = setInterval(() => {
         if (logIndex < result.logs!.length) {
           setQueryLogs((prev) => {
-            // Avoid duplicating the first translating log
             if (logIndex === 0) return [result.logs![0]];
             return [...prev, result.logs![logIndex]];
           });
@@ -41,11 +40,10 @@ export const MainContent: React.FC = () => {
           setTimeout(() => {
             setQueryActive(false);
             setQueryLogs([]);
-          }, 1500); // clear stepper and show result
+          }, 1500);
         }
       }, 800);
     } else {
-      // Error state
       if (result.logs) {
         setQueryLogs(result.logs);
       } else {
@@ -89,7 +87,7 @@ export const MainContent: React.FC = () => {
   const hasFiles = activeSession.filesUploaded && activeSession.filesUploaded.length > 0;
 
   return (
-    <main className="flex-1 h-screen bg-slate-950 flex flex-col text-slate-100 overflow-hidden">
+    <main className="flex-1 h-screen bg-slate-950 flex flex-col text-slate-100 overflow-hidden font-sans">
       {/* Session Header */}
       <div className="p-6 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between">
         <div>
@@ -124,7 +122,7 @@ export const MainContent: React.FC = () => {
           <>
             {/* Stepper Visualizer while query running */}
             {queryActive && (
-              <div className="py-6 border-b border-slate-900">
+              <div className="py-6 border-b border-slate-900 animate-pulse">
                 <ExecutionStepper logs={queryLogs} active={queryActive} />
               </div>
             )}
@@ -146,7 +144,7 @@ export const MainContent: React.FC = () => {
                         <div className="h-8 w-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-sm shrink-0">
                           Q
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1 flex-1">
                           <h3 className="text-md font-bold text-white leading-tight">{interaction.question}</h3>
                           <span className="text-[10px] text-slate-500">{new Date(interaction.timestamp).toLocaleTimeString()}</span>
                         </div>
@@ -171,43 +169,65 @@ export const MainContent: React.FC = () => {
                         </pre>
                       </div>
 
-                      {/* Grid for Results & Chart */}
+                      {/* Grid for Visualizer & Deep Findings Narrative */}
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Narrative insights */}
-                        <div className="space-y-3 p-5 bg-slate-950/40 rounded-xl border border-slate-800/60">
-                          <h4 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Analysis Narrative</h4>
-                          <p className="text-sm text-slate-300 leading-relaxed font-medium">
-                            {interaction.narrative?.summary}
-                          </p>
-                          <ul className="space-y-2 pt-2 border-t border-slate-800/60">
-                            {interaction.narrative?.insights.map((insight: string, i: number) => (
-                              <li key={i} className="text-xs text-slate-400 flex items-start space-x-2">
-                                <span className="text-indigo-500 mt-0.5">•</span>
-                                <span>{insight}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                        {/* Visualization Recharts element */}
+                        {interaction.chartData && (
+                          <Visualizer config={interaction.chartData as any} />
+                        )}
 
-                        {/* Chart Mockup */}
-                        <div className="space-y-3 p-5 bg-slate-950/40 rounded-xl border border-slate-800/60 flex flex-col justify-between">
-                          <div>
-                            <h4 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider mb-3">Generated Visualization</h4>
-                            <div className="h-32 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center relative overflow-hidden group">
-                              <div className="absolute inset-0 bg-gradient-to-tr from-violet-600/5 to-indigo-500/5 pointer-events-none" />
-                              {/* Drawing a simple pure CSS chart bar representation */}
-                              <div className="flex items-end space-x-6 h-20 w-4/5 justify-center">
-                                <div className="w-6 bg-gradient-to-t from-violet-600 to-indigo-500 rounded-t-sm h-[40%] animate-pulse" />
-                                <div className="w-6 bg-gradient-to-t from-violet-600 to-indigo-500 rounded-t-sm h-[75%] animate-pulse" />
-                                <div className="w-6 bg-gradient-to-t from-violet-600 to-indigo-500 rounded-t-sm h-[15%] animate-pulse" />
-                                <div className="w-6 bg-gradient-to-t from-violet-600 to-indigo-500 rounded-t-sm h-[25%] animate-pulse" />
-                              </div>
+                        {/* Narrative findings details */}
+                        <div className="space-y-4 p-5 bg-slate-950/40 rounded-2xl border border-slate-800/60 flex flex-col justify-between">
+                          <div className="space-y-4">
+                            <div>
+                              <h4 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider mb-1">Analysis Summary</h4>
+                              <p className="text-sm text-slate-350 leading-relaxed font-medium">
+                                {interaction.narrative?.summary}
+                              </p>
                             </div>
+
+                            {interaction.narrative?.keyInsights && (
+                              <div>
+                                <h4 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider mb-2">Key Insights</h4>
+                                <ul className="space-y-1.5">
+                                  {interaction.narrative.keyInsights.map((insight: string, i: number) => (
+                                    <li key={i} className="text-xs text-slate-300 flex items-start space-x-2">
+                                      <span className="text-indigo-500 mt-0.5">•</span>
+                                      <span>{insight}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {interaction.narrative?.limitations && (
+                              <div>
+                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Uncertainties & Limitations</h4>
+                                <ul className="space-y-1.5">
+                                  {interaction.narrative.limitations.map((lim: string, i: number) => (
+                                    <li key={i} className="text-xs text-slate-400 flex items-start space-x-2">
+                                      <span className="text-amber-500/80 mt-0.5">•</span>
+                                      <span>{lim}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </div>
-                          <div className="text-[10px] text-slate-500 flex justify-between px-1">
-                            <span>Chart: {interaction.chartData?.type}</span>
-                            <span>Dataset size: {interaction.executionResult?.rowsProcessed || interaction.executionResult?.status} rows</span>
-                          </div>
+
+                          {interaction.narrative?.nextSteps && (
+                            <div className="pt-4 border-t border-slate-800/80">
+                              <h4 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Recommended Next Steps</h4>
+                              <ul className="space-y-1">
+                                {interaction.narrative.nextSteps.map((step: string, i: number) => (
+                                  <li key={i} className="text-xs text-slate-400 flex items-start space-x-2">
+                                    <span className="text-emerald-500 mt-0.5">→</span>
+                                    <span className="italic">{step}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       </div>
 
