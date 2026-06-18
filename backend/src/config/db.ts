@@ -6,7 +6,6 @@ export const connectDB = async (): Promise<void> => {
     const conn = await mongoose.connect(mongoUri);
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
-    console.error(`Error connecting to MongoDB: ${error instanceof Error ? error.message : error}`);
-    process.exit(1);
+    console.warn(`[DB WARNING] MongoDB Connection refused: ${error instanceof Error ? error.message : error}. Falling back to in-memory buffering.`);
   }
 };

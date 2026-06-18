@@ -3,12 +3,16 @@ import multer from 'multer';
 import * as xlsx from 'xlsx';
 import path from 'path';
 import fs from 'fs';
+import mongoose from 'mongoose';
 import { Session } from '../models/Session';
 import { profileDataset } from '../utils/profiler';
 import { generateCodeFromQuery } from '../utils/llm';
 import { executePythonCode } from '../utils/sandbox';
 
 const router = Router();
+
+// In-memory fallback database for offline sandbox testing
+const memorySessions: any[] = [];
 
 // Multer memory storage configuration
 const storage = multer.memoryStorage();
@@ -38,6 +42,10 @@ if (!fs.existsSync(uploadsDir)) {
 // Get all sessions
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      res.json({ success: true, data: memorySessions });
+      return;
+    }
     const sessions = await Session.find().sort({ createdAt: -1 });
     res.json({ success: true, data: sessions });
   } catch (error) {
@@ -49,6 +57,15 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 router.get('/:sessionId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { sessionId } = req.params;
+    if (mongoose.connection.readyState !== 1) {
+      const session = memorySessions.find(s => s.sessionId === sessionId);
+      if (!session) {
+        res.status(404).json({ success: false, error: 'Session not found (Memory)' });
+        return;
+      }
+      res.json({ success: true, data: session });
+      return;
+    }
     const session = await Session.findOne({ sessionId });
     if (!session) {
       res.status(404).json({ success: false, error: 'Session not found' });
@@ -68,6 +85,24 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       res.status(400).json({ success: false, error: 'sessionId is required' });
       return;
     }
+    if (mongoose.connection.readyState !== 1) {
+      const existing = memorySessions.find(s => s.sessionId === sessionId);
+      if (existing) {
+        res.status(400).json({ success: false, error: 'Session already exists (Memory)' });
+        return;
+      }
+      const session = {
+        sessionId,
+        createdAt: new Date(),
+        filesUploaded: filesUploaded || [],
+        interactions: [],
+        dataProfile: null
+      };
+      memorySessions.unshift(session);
+      res.status(201).json({ success: true, data: session });
+      return;
+    }
+
     const existingSession = await Session.findOne({ sessionId });
     if (existingSession) {
       res.status(400).json({ success: false, error: 'Session already exists' });
@@ -94,7 +129,13 @@ router.post('/:sessionId/upload', upload.single('file'), async (req: Request, re
       return;
     }
 
-    const session = await Session.findOne({ sessionId });
+    let session: any = null;
+    if (mongoose.connection.readyState !== 1) {
+      session = memorySessions.find(s => s.sessionId === sessionId);
+    } else {
+      session = await Session.findOne({ sessionId });
+    }
+
     if (!session) {
       res.status(404).json({ success: false, error: 'Session not found' });
       return;
@@ -139,14 +180,19 @@ router.post('/:sessionId/upload', upload.single('file'), async (req: Request, re
       filePath
     };
 
-    session.filesUploaded = [fileMetadata]; // single file for now
-    session.dataProfile = profile;
-    await session.save();
+    if (mongoose.connection.readyState !== 1) {
+      session.filesUploaded = [fileMetadata];
+      session.dataProfile = profile;
+    } else {
+      session.filesUploaded = [fileMetadata];
+      session.dataProfile = profile;
+      await session.save();
+    }
 
     res.json({ success: true, data: session });
   } catch (error) {
     console.error('Upload error:', error);
-    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'File upload or parsing failed' });
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'File upload failed' });
   }
 });
 
@@ -161,7 +207,13 @@ router.post('/:sessionId/query', async (req: Request, res: Response, next: NextF
       return;
     }
 
-    const session = await Session.findOne({ sessionId });
+    let session: any = null;
+    if (mongoose.connection.readyState !== 1) {
+      session = memorySessions.find(s => s.sessionId === sessionId);
+    } else {
+      session = await Session.findOne({ sessionId });
+    }
+
     if (!session) {
       res.status(404).json({ success: false, error: 'Session not found' });
       return;
@@ -291,8 +343,12 @@ router.post('/:sessionId/query', async (req: Request, res: Response, next: NextF
       timestamp: new Date()
     };
 
-    session.interactions.push(interaction);
-    await session.save();
+    if (mongoose.connection.readyState !== 1) {
+      session.interactions.push(interaction);
+    } else {
+      session.interactions.push(interaction);
+      await session.save();
+    }
 
     res.json({
       success: true,
@@ -300,41 +356,6 @@ router.post('/:sessionId/query', async (req: Request, res: Response, next: NextF
       logs,
       interaction
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Add interaction to session
-router.post('/:sessionId/interactions', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { sessionId } = req.params;
-    const { question, generatedCode, executionResult, chartData, narrative } = req.body;
-
-    if (!question || !generatedCode) {
-      res.status(400).json({ success: false, error: 'question and generatedCode are required' });
-      return;
-    }
-
-    const session = await Session.findOne({ sessionId });
-    if (!session) {
-      res.status(404).json({ success: false, error: 'Session not found' });
-      return;
-    }
-
-    const interaction = {
-      question,
-      generatedCode,
-      executionResult: executionResult || null,
-      chartData: chartData || null,
-      narrative: narrative || null,
-      timestamp: new Date()
-    };
-
-    session.interactions.push(interaction);
-    await session.save();
-
-    res.json({ success: true, data: session });
   } catch (error) {
     next(error);
   }
